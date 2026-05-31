@@ -1,6 +1,10 @@
 import SwiftUI
 import SwiftData
 
+private enum DiagnosisSubStep {
+    case engagement, usageFrequency
+}
+
 struct DiagnosisView: View {
     @Query private var allRecords: [BeautyRecord]
     @Environment(\.modelContext) private var modelContext
@@ -8,6 +12,7 @@ struct DiagnosisView: View {
     @State private var queue: [BeautyRecord] = []
     @State private var currentIndex = 0
     @State private var showResult = false
+    @State private var currentSubStep: DiagnosisSubStep = .engagement
 
     var pendingRecords: [BeautyRecord] {
         allRecords.filter { record in
@@ -54,7 +59,11 @@ struct DiagnosisView: View {
 
             Spacer()
 
-            ratingSection
+            if currentSubStep == .engagement {
+                ratingSection
+            } else {
+                frequencySection
+            }
         }
         .background(Color.beautyBG.ignoresSafeArea())
         .navigationTitle("美容診断")
@@ -65,7 +74,11 @@ struct DiagnosisView: View {
         VStack(spacing: 8) {
             HStack {
                 Button {
-                    if currentIndex > 0 { currentIndex -= 1 }
+                    if currentSubStep == .usageFrequency {
+                        withAnimation { currentSubStep = .engagement }
+                    } else if currentIndex > 0 {
+                        currentIndex -= 1
+                    }
                 } label: {
                     HStack(spacing: 4) {
                         Image(systemName: "chevron.left")
@@ -75,8 +88,8 @@ struct DiagnosisView: View {
                     }
                     .foregroundColor(.beautySubText)
                 }
-                .opacity(currentIndex > 0 ? 1 : 0)
-                .disabled(currentIndex == 0)
+                .opacity(currentIndex > 0 || currentSubStep == .usageFrequency ? 1 : 0)
+                .disabled(currentIndex == 0 && currentSubStep == .engagement)
 
                 Spacer()
 
@@ -147,7 +160,9 @@ struct DiagnosisView: View {
                 }
             }
 
-            Text("満足度を評価してください")
+            Text(currentSubStep == .engagement
+                ? "満足度を評価してください"
+                : "どのくらいの頻度で使いましたか？")
                 .font(.subheadline)
                 .foregroundColor(.beautySubText)
         }
@@ -182,6 +197,51 @@ struct DiagnosisView: View {
 
             Button {
                 advanceToNext()
+            } label: {
+                Text("スキップ")
+                    .font(.subheadline)
+                    .foregroundColor(.beautySubText)
+                    .padding(.vertical, 8)
+                    .padding(.horizontal, 24)
+                    .background(Color.beautySubText.opacity(0.08))
+                    .clipShape(Capsule())
+            }
+        }
+        .padding(.bottom, 40)
+    }
+
+    var frequencySection: some View {
+        VStack(spacing: 12) {
+            VStack(spacing: 10) {
+                ForEach([
+                    (label: "よく使う",         emoji: "👍", freq: UsageFrequency.often,     color: Color(hex: "#7BC67E")),
+                    (label: "たまに使う",        emoji: "🤔", freq: UsageFrequency.sometimes, color: Color(hex: "#FFB347")),
+                    (label: "ほぼ使っていない",  emoji: "👎", freq: UsageFrequency.rarely,    color: Color(hex: "#FF6B6B")),
+                ], id: \.label) { item in
+                    Button {
+                        guard currentIndex < queue.count else { return }
+                        submitFrequency(item.freq, for: queue[currentIndex])
+                    } label: {
+                        HStack {
+                            Text(item.emoji).font(.title3)
+                            Text(item.label)
+                                .font(.subheadline.bold())
+                                .foregroundColor(item.color)
+                            Spacer()
+                        }
+                        .padding(.horizontal, 20)
+                        .padding(.vertical, 14)
+                        .background(item.color.opacity(0.1))
+                        .clipShape(RoundedRectangle(cornerRadius: 14))
+                    }
+                    .buttonStyle(.plain)
+                }
+            }
+            .padding(.horizontal, 24)
+
+            Button {
+                guard currentIndex < queue.count else { return }
+                submitFrequency(nil, for: queue[currentIndex])
             } label: {
                 Text("スキップ")
                     .font(.subheadline)
@@ -349,17 +409,32 @@ struct DiagnosisView: View {
 
     func submitRating(stars: Int, for record: BeautyRecord) {
         switch stars {
-        case 1, 2:
-            record.engagementLevel = .dissatisfied
-            record.diagnosisResult = .unused
-        case 3:
-            record.engagementLevel = .neutral
-            record.diagnosisResult = .maybe
-        default:
-            record.engagementLevel = .satisfied
-            record.diagnosisResult = .active
+        case 1, 2: record.engagementLevel = .dissatisfied
+        case 3:    record.engagementLevel = .neutral
+        default:   record.engagementLevel = .satisfied
+        }
+
+        if record.category?.name == "スキンケア" {
+            withAnimation(.easeInOut(duration: 0.2)) {
+                currentSubStep = .usageFrequency
+            }
+        } else {
+            record.diagnosisResult = record.engagementLevel == .dissatisfied ? .unused
+                                   : record.engagementLevel == .neutral      ? .maybe : .active
+            record.lastDiagnosedAt = Date()
+            advanceToNext()
+        }
+    }
+
+    func submitFrequency(_ frequency: UsageFrequency?, for record: BeautyRecord) {
+        record.usageFrequency = frequency
+        switch frequency {
+        case .rarely:         record.diagnosisResult = .unused
+        case .sometimes:      record.diagnosisResult = .maybe
+        case .often, nil:     record.diagnosisResult = .active
         }
         record.lastDiagnosedAt = Date()
+        withAnimation { currentSubStep = .engagement }
         advanceToNext()
     }
 
