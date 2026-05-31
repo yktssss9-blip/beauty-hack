@@ -66,6 +66,9 @@ struct AnalysisView: View {
                 }
             }
             .background(Color.beautyBG)
+            .navigationDestination(for: String.self) { categoryName in
+                EngagementCategoryDetailView(categoryName: categoryName)
+            }
         }
     }
 
@@ -396,27 +399,32 @@ struct AnalysisView: View {
                 .font(.headline)
                 .foregroundColor(.beautyText)
             ForEach(engagementData) { entry in
-                HStack(spacing: 12) {
-                    ZStack {
-                        Circle()
-                            .fill(Color(hex: entry.colorHex).opacity(0.15))
-                            .frame(width: 36, height: 36)
-                        Image(systemName: entry.icon)
-                            .font(.caption)
-                            .foregroundColor(Color(hex: entry.colorHex))
-                    }
-                    VStack(alignment: .leading, spacing: 3) {
-                        Text(entry.name)
-                            .font(.subheadline)
-                            .foregroundColor(.beautyText)
-                        Text("\(entry.count)件の回答")
-                            .font(.caption2)
-                            .foregroundColor(.beautySubText)
-                    }
-                    Spacer()
-                    VStack(alignment: .trailing, spacing: 3) {
-                        starView(score: entry.averageScore)
-                        Text(String(format: "%.1f / 3.0", entry.averageScore))
+                NavigationLink(value: entry.name) {
+                    HStack(spacing: 12) {
+                        ZStack {
+                            Circle()
+                                .fill(Color(hex: entry.colorHex).opacity(0.15))
+                                .frame(width: 36, height: 36)
+                            Image(systemName: entry.icon)
+                                .font(.caption)
+                                .foregroundColor(Color(hex: entry.colorHex))
+                        }
+                        VStack(alignment: .leading, spacing: 3) {
+                            Text(entry.name)
+                                .font(.subheadline)
+                                .foregroundColor(.beautyText)
+                            Text("\(entry.count)件の回答")
+                                .font(.caption2)
+                                .foregroundColor(.beautySubText)
+                        }
+                        Spacer()
+                        VStack(alignment: .trailing, spacing: 3) {
+                            starView(score: entry.averageScore)
+                            Text(String(format: "%.1f / 3.0", entry.averageScore))
+                                .font(.caption2)
+                                .foregroundColor(.beautySubText)
+                        }
+                        Image(systemName: "chevron.right")
                             .font(.caption2)
                             .foregroundColor(.beautySubText)
                     }
@@ -452,5 +460,123 @@ struct AnalysisView: View {
             .foregroundColor(.beautySubText)
             .frame(maxWidth: .infinity, alignment: .center)
             .padding(.vertical, 8)
+    }
+}
+
+// MARK: - Engagement Category Detail
+
+struct EngagementCategoryDetailView: View {
+    let categoryName: String
+    @Query private var allRecords: [BeautyRecord]
+
+    private var categoryRecords: [BeautyRecord] {
+        allRecords
+            .filter { $0.category?.name == categoryName && $0.engagementLevel != nil }
+            .sorted { ($0.engagementLevel?.rawValue ?? 0) > ($1.engagementLevel?.rawValue ?? 0) }
+    }
+
+    private var averageScore: Double {
+        let scores = categoryRecords.compactMap { $0.engagementLevel?.rawValue }
+        guard !scores.isEmpty else { return 0 }
+        return Double(scores.reduce(0, +)) / Double(scores.count)
+    }
+
+    var body: some View {
+        ScrollView {
+            VStack(spacing: 16) {
+                averageScoreCard
+
+                VStack(spacing: 0) {
+                    ForEach(Array(categoryRecords.enumerated()), id: \.offset) { index, record in
+                        NavigationLink(destination: DetailView(record: record, toastMessage: .constant(nil))) {
+                            productRow(record: record)
+                        }
+                        if index < categoryRecords.count - 1 {
+                            Divider().padding(.leading, 68)
+                        }
+                    }
+                }
+                .background(Color.beautyCard)
+                .clipShape(RoundedRectangle(cornerRadius: 16))
+                .shadow(color: .black.opacity(0.05), radius: 8, y: 2)
+            }
+            .padding()
+        }
+        .background(Color.beautyBG.ignoresSafeArea())
+        .navigationTitle(categoryName)
+        .navigationBarTitleDisplayMode(.inline)
+    }
+
+    private var averageScoreCard: some View {
+        VStack(spacing: 10) {
+            Text("カテゴリ平均満足度")
+                .font(.caption)
+                .foregroundColor(.beautySubText)
+            starsView(score: averageScore)
+                .scaleEffect(1.3)
+            Text(String(format: "%.1f / 3.0", averageScore))
+                .font(.subheadline.weight(.semibold))
+                .foregroundColor(.beautyText)
+            Text("\(categoryRecords.count)件の評価")
+                .font(.caption2)
+                .foregroundColor(.beautySubText)
+        }
+        .frame(maxWidth: .infinity)
+        .padding(20)
+        .background(Color.beautyCard)
+        .clipShape(RoundedRectangle(cornerRadius: 16))
+        .shadow(color: .black.opacity(0.05), radius: 8, y: 2)
+    }
+
+    private func productRow(record: BeautyRecord) -> some View {
+        HStack(spacing: 12) {
+            let catColor: Color = {
+                guard let hex = record.category?.color else { return .beautyRose }
+                return Color(hex: hex)
+            }()
+
+            ZStack {
+                Circle()
+                    .fill(catColor.opacity(0.12))
+                    .frame(width: 40, height: 40)
+                Image(systemName: record.category?.icon ?? "sparkles")
+                    .font(.system(size: 16))
+                    .foregroundColor(catColor)
+            }
+
+            VStack(alignment: .leading, spacing: 3) {
+                Text(record.title)
+                    .font(.subheadline.weight(.medium))
+                    .foregroundColor(.beautyText)
+                    .lineLimit(1)
+                Text(record.date.formatted(.dateTime.year().month().day()))
+                    .font(.caption2)
+                    .foregroundColor(.beautySubText)
+            }
+
+            Spacer()
+
+            if let level = record.engagementLevel {
+                starsView(score: Double(level.rawValue))
+            }
+
+            Image(systemName: "chevron.right")
+                .font(.caption2)
+                .foregroundColor(.beautySubText)
+        }
+        .padding(.horizontal, 16)
+        .padding(.vertical, 12)
+    }
+
+    private func starsView(score: Double) -> some View {
+        let filled = Int(round(score))
+        let color: Color = score >= 2.5 ? Color(hex: "#7BC67E") : score >= 1.5 ? Color(hex: "#FFB347") : Color(hex: "#FF6B6B")
+        return HStack(spacing: 2) {
+            ForEach(1...3, id: \.self) { i in
+                Image(systemName: i <= filled ? "star.fill" : "star")
+                    .font(.caption.weight(.semibold))
+                    .foregroundColor(i <= filled ? color : Color.beautySubText.opacity(0.25))
+            }
+        }
     }
 }

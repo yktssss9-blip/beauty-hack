@@ -11,7 +11,6 @@ struct CalendarView: View {
     @State private var categoryFilter: UUID? = nil
     @State private var selectedRecord: BeautyRecord?
     @State private var slideForward = true
-    @State private var searchText = ""
 
     private let cal = Calendar.current
 
@@ -43,84 +42,54 @@ struct CalendarView: View {
             .map { $0 }
     }
 
-    private var searchResults: [BeautyRecord] {
-        guard !searchText.isEmpty else { return [] }
-        return records
-            .filter { !$0.isAftercare && $0.title.localizedCaseInsensitiveContains(searchText) }
-            .sorted { $0.date > $1.date }
-    }
-
-    private var pendingDiagnosisCount: Int {
-        records.filter { record in
-            guard let lastDiagnosed = record.lastDiagnosedAt else { return true }
-            return Calendar.current.dateComponents([.day], from: lastDiagnosed, to: Date()).day ?? 0 >= 30
-        }.count
-    }
-
     var body: some View {
         NavigationStack {
             ScrollView {
-                if searchText.isEmpty {
+                VStack(spacing: 0) {
+                    monthHeader
+                    weekdayHeader
+
                     VStack(spacing: 0) {
-                        monthHeader
-                        weekdayHeader
-
-                        // スライドアニメーション付きカレンダーグリッド
-                        VStack(spacing: 0) {
-                            CustomCalendarGrid(
-                                month: displayedMonth,
-                                recordsByDate: recordsByDate,
-                                selectedDate: $selectedDate,
-                                showDaySheet: $showDaySheet,
-                                onRecordTapped: { record in selectedRecord = record }
-                            )
-                            if !uniqueCategories.isEmpty {
-                                categoryShortcuts
-                            }
+                        CustomCalendarGrid(
+                            month: displayedMonth,
+                            recordsByDate: recordsByDate,
+                            selectedDate: $selectedDate,
+                            showDaySheet: $showDaySheet,
+                            onRecordTapped: { record in selectedRecord = record }
+                        )
+                        if !uniqueCategories.isEmpty {
+                            categoryShortcuts
                         }
-                        .id(displayedMonth)
-                        .transition(.asymmetric(
-                            insertion: .move(edge: slideForward ? .trailing : .leading),
-                            removal: .move(edge: slideForward ? .leading : .trailing)
-                        ))
-                        .clipped()
-
-                        monthSummary
                     }
-                    .simultaneousGesture(
-                        DragGesture(minimumDistance: 20)
-                            .onEnded { value in
-                                guard abs(value.translation.width) > abs(value.translation.height),
-                                      abs(value.translation.width) > 50 else { return }
-                                withAnimation(.easeInOut(duration: 0.3)) {
-                                    if value.translation.width < 0 {
-                                        slideForward = true
-                                        displayedMonth = cal.date(byAdding: .month, value: 1, to: displayedMonth) ?? displayedMonth
-                                    } else {
-                                        slideForward = false
-                                        displayedMonth = cal.date(byAdding: .month, value: -1, to: displayedMonth) ?? displayedMonth
-                                    }
+                    .id(displayedMonth)
+                    .transition(.asymmetric(
+                        insertion: .move(edge: slideForward ? .trailing : .leading),
+                        removal: .move(edge: slideForward ? .leading : .trailing)
+                    ))
+                    .clipped()
+
+                    monthSummary
+                }
+                .simultaneousGesture(
+                    DragGesture(minimumDistance: 20)
+                        .onEnded { value in
+                            guard abs(value.translation.width) > abs(value.translation.height),
+                                  abs(value.translation.width) > 50 else { return }
+                            withAnimation(.easeInOut(duration: 0.55)) {
+                                if value.translation.width < 0 {
+                                    slideForward = true
+                                    displayedMonth = cal.date(byAdding: .month, value: 1, to: displayedMonth) ?? displayedMonth
+                                } else {
+                                    slideForward = false
+                                    displayedMonth = cal.date(byAdding: .month, value: -1, to: displayedMonth) ?? displayedMonth
                                 }
                             }
-                    )
-                } else {
-                    searchResultsList
-                }
+                        }
+                )
             }
             .background(Color.beautyBG)
-            .searchable(text: $searchText, prompt: "タイトルで検索")
             .navigationTitle("カレンダー")
             .navigationBarTitleDisplayMode(.inline)
-            .toolbar {
-                ToolbarItem(placement: .navigationBarLeading) {
-                    Image(systemName: "line.3.horizontal")
-                        .foregroundColor(.beautyText)
-                        .font(.system(size: 16, weight: .medium))
-                }
-                ToolbarItem(placement: .navigationBarTrailing) {
-                    bellButton
-                }
-            }
             .navigationDestination(isPresented: Binding(
                 get: { selectedRecord != nil },
                 set: { if !$0 { selectedRecord = nil } }
@@ -143,28 +112,12 @@ struct CalendarView: View {
         }
     }
 
-    private var bellButton: some View {
-        ZStack(alignment: .topTrailing) {
-            Image(systemName: "bell")
-                .foregroundColor(.beautyText)
-                .font(.system(size: 16))
-            if pendingDiagnosisCount > 0 {
-                Text("\(pendingDiagnosisCount)")
-                    .font(.system(size: 8, weight: .bold))
-                    .foregroundColor(.white)
-                    .padding(.horizontal, 3)
-                    .padding(.vertical, 2)
-                    .background(Color.beautyAlertRed)
-                    .clipShape(Capsule())
-                    .offset(x: 10, y: -8)
-            }
-        }
-    }
+    // MARK: - Sub-views
 
     private var monthHeader: some View {
         HStack {
             Button {
-                withAnimation(.easeInOut(duration: 0.3)) {
+                withAnimation(.easeInOut(duration: 0.55)) {
                     slideForward = false
                     displayedMonth = cal.date(byAdding: .month, value: -1, to: displayedMonth) ?? displayedMonth
                 }
@@ -180,7 +133,7 @@ struct CalendarView: View {
                 .foregroundColor(.beautyText)
             Spacer()
             Button {
-                withAnimation(.easeInOut(duration: 0.3)) {
+                withAnimation(.easeInOut(duration: 0.55)) {
                     slideForward = true
                     displayedMonth = cal.date(byAdding: .month, value: 1, to: displayedMonth) ?? displayedMonth
                 }
@@ -289,38 +242,6 @@ struct CalendarView: View {
         .cornerRadius(12)
         .padding(.horizontal)
         .padding(.top, 8)
-        .padding(.bottom, 100)
-    }
-
-    private var searchResultsList: some View {
-        VStack(alignment: .leading, spacing: 0) {
-            Text("\(searchResults.count)件")
-                .font(.caption)
-                .foregroundColor(.beautySubText)
-                .padding(.horizontal)
-                .padding(.top, 16)
-                .padding(.bottom, 8)
-
-            if searchResults.isEmpty {
-                Text("「\(searchText)」に一致する予定はありません")
-                    .font(.subheadline)
-                    .foregroundColor(.beautySubText)
-                    .padding()
-                    .frame(maxWidth: .infinity, alignment: .center)
-            } else {
-                VStack(spacing: 0) {
-                    ForEach(searchResults) { record in
-                        NavigationLink(destination: DetailView(record: record, toastMessage: .constant(nil))) {
-                            recordRow(record)
-                        }
-                        Divider().padding(.leading, 56)
-                    }
-                }
-                .background(Color.beautyCard)
-                .cornerRadius(12)
-                .padding(.horizontal)
-            }
-        }
         .padding(.bottom, 100)
     }
 

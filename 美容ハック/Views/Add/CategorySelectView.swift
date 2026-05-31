@@ -1,35 +1,20 @@
 import SwiftUI
 import SwiftData
-
-private struct CategoryItem {
-    let name: String
-    let baseIcon: String
-    let badgeIcon: String?
-    let color: Color
-}
+import UserNotifications
 
 struct CategorySelectView: View {
     @Binding var path: [AddNavigation]
     @Environment(\.dismiss) private var dismiss
     @Environment(\.modelContext) private var modelContext
 
-    @Query(filter: #Predicate<BeautyCategory> { !$0.isPreset }, sort: \BeautyCategory.sortOrder)
-    private var customCategories: [BeautyCategory]
+    @Query(sort: \BeautyCategory.sortOrder)
+    private var allCategories: [BeautyCategory]
 
     @State private var showAddCategory = false
     @State private var showScanSheet = false
     @State private var editingCategory: BeautyCategory?
     @State private var deletingCategory: BeautyCategory?
-
-    private let categories: [CategoryItem] = [
-        CategoryItem(name: "カラコン",   baseIcon: "eye.circle.fill",         badgeIcon: nil,         color: .contactBlue),
-        CategoryItem(name: "整形",       baseIcon: "face.smiling.fill",        badgeIcon: "star.fill", color: .surgeryPurple),
-        CategoryItem(name: "エステ",     baseIcon: "figure.stand",             badgeIcon: "star.fill", color: .esteRose),
-        CategoryItem(name: "マツエク",   baseIcon: "eye.fill",                 badgeIcon: nil,         color: .lashBrown),
-        CategoryItem(name: "ヘア",       baseIcon: "scissors",                 badgeIcon: nil,         color: .permYellow),
-        CategoryItem(name: "スキンケア", baseIcon: "sparkles",                 badgeIcon: nil,         color: .skinGreen),
-        CategoryItem(name: "ネイル",     baseIcon: "paintbrush.pointed.fill",  badgeIcon: nil,         color: .nailPink),
-    ]
+    @State private var isEditing = false
 
     var body: some View {
         ScrollView {
@@ -66,40 +51,8 @@ struct CategorySelectView: View {
                 columns: [GridItem(.flexible()), GridItem(.flexible())],
                 spacing: 16
             ) {
-                ForEach(categories, id: \.name) { cat in
-                    Button {
-                        if cat.name == "カラコン" {
-                            path.append(.templateSchedule(
-                                categoryName: cat.name,
-                                templateName: "カラコン"
-                            ))
-                        } else {
-                            path.append(.subCategory(categoryName: cat.name))
-                        }
-                    } label: {
-                        categoryCard(cat)
-                    }
-                    .buttonStyle(.plain)
-                }
-                ForEach(customCategories) { category in
-                    Button {
-                        path.append(.subCategory(categoryName: category.name))
-                    } label: {
-                        customCategoryCard(category)
-                    }
-                    .buttonStyle(.plain)
-                    .contextMenu {
-                        Button {
-                            editingCategory = category
-                        } label: {
-                            Label("編集", systemImage: "pencil")
-                        }
-                        Button(role: .destructive) {
-                            deletingCategory = category
-                        } label: {
-                            Label("削除", systemImage: "trash")
-                        }
-                    }
+                ForEach(allCategories) { category in
+                    categoryGridItem(category)
                 }
                 Button {
                     showAddCategory = true
@@ -117,6 +70,11 @@ struct CategorySelectView: View {
             ToolbarItem(placement: .cancellationAction) {
                 Button("閉じる") { dismiss() }
                     .foregroundStyle(Color.beautySubText)
+            }
+            ToolbarItem(placement: .primaryAction) {
+                Button(isEditing ? "完了" : "編集") {
+                    isEditing.toggle()
+                }
             }
         }
         .sheet(isPresented: $showAddCategory) {
@@ -137,52 +95,81 @@ struct CategorySelectView: View {
             presenting: deletingCategory
         ) { category in
             Button("削除", role: .destructive) {
-                modelContext.delete(category)
-                try? modelContext.save()
-                deletingCategory = nil
+                deleteCategory(category)
             }
             Button("キャンセル", role: .cancel) {}
         } message: { category in
-            Text("「\(category.name)」を削除しますか？この操作は元に戻せません。")
+            if category.isPreset {
+                Text("「\(category.name)」を削除しますか？この操作は元に戻せません。関連する記録もすべて削除されます。")
+            } else {
+                Text("「\(category.name)」を削除しますか？この操作は元に戻せません。")
+            }
         }
     }
 
     @ViewBuilder
-    private func iconView(base: String, badge: String?, color: Color) -> some View {
-        ZStack(alignment: .topTrailing) {
-            Image(systemName: base)
-                .font(.system(size: 42))
-                .foregroundStyle(color)
-            if let badge {
-                Image(systemName: badge)
-                    .font(.system(size: 15))
-                    .foregroundStyle(Color(hex: "#FFD700"))
-                    .offset(x: 6, y: -2)
+    private func categoryGridItem(_ category: BeautyCategory) -> some View {
+        ZStack(alignment: .topLeading) {
+            Button {
+                guard !isEditing else { return }
+                navigateToCategory(category)
+            } label: {
+                categoryCardView(category)
+            }
+            .buttonStyle(.plain)
+            .contextMenu {
+                if !category.isPreset {
+                    Button {
+                        editingCategory = category
+                    } label: {
+                        Label("編集", systemImage: "pencil")
+                    }
+                }
+                Button(role: .destructive) {
+                    deletingCategory = category
+                } label: {
+                    Label("削除", systemImage: "trash")
+                }
+            }
+
+            if isEditing {
+                Button {
+                    deletingCategory = category
+                } label: {
+                    Image(systemName: "minus.circle.fill")
+                        .font(.title3)
+                        .foregroundStyle(.red)
+                        .background(Color.white, in: Circle())
+                }
+                .offset(x: -6, y: -6)
             }
         }
-        .frame(width: 58, height: 58)
     }
 
-    private func categoryCard(_ cat: CategoryItem) -> some View {
-        VStack(spacing: 14) {
-            iconView(base: cat.baseIcon, badge: cat.badgeIcon, color: cat.color)
-            Text(cat.name)
-                .font(.headline)
-                .foregroundStyle(Color.beautyText)
-                .multilineTextAlignment(.center)
+    private func navigateToCategory(_ category: BeautyCategory) {
+        if category.name == "カラコン" {
+            path.append(.templateSchedule(
+                categoryName: category.name,
+                templateName: "カラコン"
+            ))
+        } else {
+            path.append(.subCategory(categoryName: category.name))
         }
-        .frame(maxWidth: .infinity)
-        .padding(.vertical, 34)
-        .background(Color.beautyCard)
-        .clipShape(RoundedRectangle(cornerRadius: 16))
-        .shadow(color: .black.opacity(0.07), radius: 6, y: 3)
     }
 
-    private func customCategoryCard(_ category: BeautyCategory) -> some View {
-        VStack(spacing: 14) {
+    private func deleteCategory(_ category: BeautyCategory) {
+        NotificationManager.shared.cancelNotifications(for: category)
+        modelContext.delete(category)
+        try? modelContext.save()
+        deletingCategory = nil
+    }
+
+    private func categoryCardView(_ category: BeautyCategory) -> some View {
+        let color = Color(hex: category.color)
+        return VStack(spacing: 14) {
             Image(systemName: category.icon)
-                .font(.system(size: 46))
-                .foregroundStyle(Color(hex: category.color))
+                .font(.system(size: 42))
+                .foregroundStyle(color)
             Text(category.name)
                 .font(.headline)
                 .foregroundStyle(Color.beautyText)

@@ -11,6 +11,12 @@ class NotificationManager {
             .requestAuthorization(options: [.alert, .badge, .sound])
     }
 
+    func cancelNotifications(for category: BeautyCategory) {
+        let ids = category.records.flatMap { $0.reminders.map { $0.id.uuidString } }
+        guard !ids.isEmpty else { return }
+        UNUserNotificationCenter.current().removePendingNotificationRequests(withIdentifiers: ids)
+    }
+
     func scheduleNotifications(for record: BeautyRecord, isPro: Bool = false) {
         guard record.category?.isNotificationEnabled == true else { return }
 

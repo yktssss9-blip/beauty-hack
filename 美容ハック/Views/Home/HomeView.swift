@@ -6,17 +6,11 @@ struct HomeView: View {
     @Binding var toastMessage: String?
     @Query private var records: [BeautyRecord]
 
-    @State private var sortOrder: SortOrder = .deadline
     @State private var selectedRecord: BeautyRecord?
     @State private var showHairDetail = false
     @State private var showPaymentHistory = false
     @State private var selectedCategoryName: String? = nil
     @State private var searchText = ""
-
-    enum SortOrder: String, CaseIterable {
-        case deadline = "直近順"
-        case category = "カテゴリ別"
-    }
 
     var body: some View {
         NavigationStack {
@@ -26,12 +20,30 @@ struct HomeView: View {
 
                     ProposalBannerView(allRecords: records)
 
+                    HStack(spacing: 10) {
+                        Image(systemName: "magnifyingglass")
+                            .foregroundColor(.beautySubText)
+                            .font(.system(size: 15))
+                        TextField("タイトルで検索", text: $searchText)
+                            .font(.subheadline)
+                        if !searchText.isEmpty {
+                            Button { searchText = "" } label: {
+                                Image(systemName: "xmark.circle.fill")
+                                    .foregroundColor(.beautySubText)
+                            }
+                        }
+                    }
+                    .padding(.horizontal, 12)
+                    .padding(.vertical, 10)
+                    .background(Color.white)
+                    .clipShape(RoundedRectangle(cornerRadius: 12))
+                    .shadow(color: .black.opacity(0.04), radius: 4, y: 2)
+                    .padding(.horizontal)
+
                     if !hairRecords.isEmpty {
                         HairRemovalSummaryCard(records: hairRecords)
                             .onTapGesture { showHairDetail = true }
                     }
-
-                    sortTabView
 
                     categoryFilterView
 
@@ -46,7 +58,6 @@ struct HomeView: View {
                 .padding(.bottom, 100)
             }
             .background(Color.beautyBG)
-            .searchable(text: $searchText, prompt: "タイトルで検索")
             .navigationTitle("美容ハック")
             .navigationBarTitleDisplayMode(.inline)
             .navigationDestination(item: $selectedRecord) { record in
@@ -86,26 +97,6 @@ struct HomeView: View {
         }
     }
 
-    private var sortTabView: some View {
-        ScrollView(.horizontal, showsIndicators: false) {
-            HStack(spacing: 8) {
-                ForEach(SortOrder.allCases, id: \.self) { order in
-                    Button(order.rawValue) {
-                        sortOrder = order
-                    }
-                    .padding(.horizontal, 16)
-                    .padding(.vertical, 8)
-                    .background(sortOrder == order ? Color.beautyDark : Color.white)
-                    .foregroundColor(sortOrder == order ? .white : .beautyText)
-                    .clipShape(Capsule())
-                    .font(.subheadline)
-                    .animation(.easeInOut(duration: 0.15), value: sortOrder)
-                }
-            }
-            .padding(.horizontal)
-        }
-    }
-
     private var hairRecords: [BeautyRecord] {
         records.filter { $0.hairRemovalArea != nil }
     }
@@ -126,13 +117,8 @@ struct HomeView: View {
     }
 
     private var sortedRecords: [BeautyRecord] {
-        switch sortOrder {
-        case .deadline:
-            return filteredRecords.sorted {
-                ($0.nextDate ?? $0.date) < ($1.nextDate ?? $1.date)
-            }
-        case .category:
-            return filteredRecords.sorted { ($0.category?.name ?? "") < ($1.category?.name ?? "") }
+        filteredRecords.sorted {
+            ($0.nextDate ?? $0.date) < ($1.nextDate ?? $1.date)
         }
     }
 

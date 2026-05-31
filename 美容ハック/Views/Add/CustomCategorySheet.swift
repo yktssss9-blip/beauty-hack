@@ -1,5 +1,6 @@
 import SwiftUI
 import SwiftData
+import UserNotifications
 
 struct CustomCategorySheet: View {
     @Environment(\.modelContext) private var modelContext
@@ -10,6 +11,7 @@ struct CustomCategorySheet: View {
     @State private var name: String
     @State private var selectedColorHex: String
     @State private var selectedIcon: String
+    @State private var showDeleteAlert = false
     @FocusState private var isNameFocused: Bool
 
     init(editing category: BeautyCategory? = nil) {
@@ -58,10 +60,31 @@ struct CustomCategorySheet: View {
                     Button("キャンセル") { dismiss() }
                         .foregroundStyle(Color.beautySubText)
                 }
+                if editingCategory != nil {
+                    ToolbarItem(placement: .bottomBar) {
+                        Button(role: .destructive) {
+                            showDeleteAlert = true
+                        } label: {
+                            Label("カテゴリを削除", systemImage: "trash")
+                                .foregroundStyle(.red)
+                        }
+                    }
+                }
                 ToolbarItem(placement: .confirmationAction) {
                     Button(editingCategory == nil ? "追加" : "保存") { saveCategory() }
                         .disabled(name.isEmpty)
                 }
+            }
+            .alert("カテゴリを削除", isPresented: $showDeleteAlert, presenting: editingCategory) { category in
+                Button("削除", role: .destructive) {
+                    NotificationManager.shared.cancelNotifications(for: category)
+                    modelContext.delete(category)
+                    try? modelContext.save()
+                    dismiss()
+                }
+                Button("キャンセル", role: .cancel) {}
+            } message: { category in
+                Text("「\(category.name)」を削除しますか？この操作は元に戻せません。")
             }
             .onAppear { isNameFocused = true }
         }

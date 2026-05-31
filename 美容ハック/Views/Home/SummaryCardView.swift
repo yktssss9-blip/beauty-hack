@@ -39,7 +39,7 @@ struct SummaryCardView: View {
                     Text("登録件数")
                         .font(.caption2)
                         .foregroundColor(.white.opacity(0.6))
-                    Text("\(records.count)件")
+                    Text("\(records.filter { $0.amount != nil }.count)件")
                         .font(.subheadline)
                         .foregroundColor(.white)
                 }
